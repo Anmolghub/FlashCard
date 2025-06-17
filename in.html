@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flashcard Generator</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.22.9/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+</head>
+<body>
+  <div id="root" className="min-h-screen bg-gray-100 flex items-center justify-center p-4"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+    const { jsPDF } = window.jspdf;
+
+    // Function to extract text from a PDF file
+    async function extractTextFromPDF(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+      let text = '';
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        text += pageText + '\n';
+      }
+
+      return text;
+    }
+
+    // Simulated LLM function to generate flashcards from text
+    function generateFlashcards(text) {
+      if (!text || text.trim() === '') {
+        return [];
+      }
+
+      const lines = text.split('\n').filter(line => line.trim().length > 2);
+      const flashcards = [];
+
+      lines.forEach(line => {
+        if (line.includes(':')) {
+          const [question, ...answerParts] = line.split(':');
+          const answer = answerParts.join(':').trim();
+          if (question && answer) {
+            flashcards.push({ question: question.trim(), answer });
+          }
+        } else {
+          flashcards.push({
+            question: `What is ${line.trim()}?`,
+            answer: 'Please provide a definition.'
+          });
+        }
+      });
+
+      return flashcards;
+    }
+
+    // Flashcard Component
+    function Flashcard({ question, answer, index, isStudyMode = false, isFlipped, onFlip }) {
+      return (
+        <div
+          className={`${
+            isStudyMode ? 'w-full max-w-md h-64' : 'w-64 h-40'
+          } bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl shadow-lg flex flex-col justify-center items-center cursor-pointer hover:shadow-xl transition-all duration-300 border border-blue-200`}
+          onClick={onFlip}
+        >
+          <p className="text-xl font-bold text-blue-800 text-center mb-2">
+            {isFlipped ? answer : question}
+          </p>
+          <p className="text-sm text-blue-600">
+            {isFlipped ? 'Question' : 'Answer'} {index + 1}
+          </p>
+        </div>
+      );
+    }
+
+    // Study Mode Component
+    function StudyMode({ flashcards, onExit }) {
+      const [currentIndex, setCurrentIndex] = useState(0);
+      const [isFlipped, setIsFlipped] = useState(false);
+
+      const handleNext = () => {
+        setIsFlipped(false);
+        setCurrentIndex((prev) => (prev + 1) % flashcards.length);
+      };
+
+      const handlePrev = () => {
+        setIsFlipped(false);
+        setCurrentIndex((prev) => (prev - 1 + flashcards.length) % flashcards.length);
+      };
+
+      return (
+        <div className="w-full max-w-lg">
+          <div className="flex justify-between mb-4">
+            <button
+              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition"
+              onClick={onExit}
+            >
+              Exit Study Mode
+            </button>
+            <div>
+              <button
+                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition mr-2"
+                onClick={handlePrev}
+              >
+                Previous
+              </button>
+              <button
+                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
+                onClick={handleNext}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+          <Flashcard
+            question={flashcards[currentIndex].question}
+            answer={flashcards[currentIndex].answer}
+            index={currentIndex}
+            isStudyMode={true}
+            isFlipped={isFlipped}
+            onFlip={() => setIsFlipped(!isFlipped)}
+          />
+          <p className="text-center mt-4 text-gray-600">
+            Card {currentIndex + 1} of {flashcards.length}
+          </p>
+        </div>
+      );
+    }
+
+    // Main App Component
+    function App() {
+      const [inputText, setInputText] = useState('');
+      const [flashcards, setFlashcards] = useState([]);
+      const [error, setError] = useState('');
+      const [isStudyMode, setIsStudyMode] = useState(false);
+      const [flippedStates, setFlippedStates] = useState([]);
+
+      const handleFileUpload = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (!file.type.includes('pdf')) {
+          setError('Please upload a valid PDF file.');
+          return;
+        }
+
+        try {
+          setError('');
+          const text = await extractTextFromPDF(file);
+          setInputText(text);
+        } catch (err) {
+          setError('Failed to extract text from PDF. Please try again.');
+        }
+      };
+
+      const handleGenerate = () => {
+        setError('');
+        const generated = generateFlashcards(inputText);
+
+        if (generated.length === 0) {
+          setError('No valid content found to generate flashcards. Please provide meaningful input.');
+          setFlashcards([]);
+          return;
+        }
+
+        setFlashcards(generated);
+        setFlippedStates(new Array(generated.length).fill(false));
+      };
+
+      const toggleFlip = (index) => {
+        setFlippedStates((prev) =>
+          prev.map((state, i) => (i === index ? !state : state))
+        );
+      };
+
+      const handleExportText = () => {
+        if (flashcards.length === 0) {
+          setError('No flashcards to export.');
+          return;
+        }
+
+        const exportText = flashcards.map(card => `Q: ${card.question}\nA: ${card.answer}`).join('\n\n');
+        const blob = new Blob([exportText], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'flashcards.txt';
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const handleExportPDF = () => {
+        if (flashcards.length === 0) {
+          setError('No flashcards to export.');
+          return;
+        }
+
+        const doc = new jsPDF();
+        let yOffset = 20;
+
+        flashcards.forEach((card, index) => {
+          if (yOffset > 270) {
+            doc.addPage();
+            yOffset = 20;
+          }
+
+          doc.setFontSize(16);
+          doc.setTextColor(0, 102, 204);
+          doc.text(`Flashcard ${index + 1}`, 20, yOffset);
+          yOffset += 10;
+
+          doc.setFontSize(12);
+          doc.setTextColor(0, 0, 0);
+          doc.text(`Question: ${card.question}`, 20, yOffset, { maxWidth: 160 });
+          yOffset += 15;
+
+          doc.text(`Answer: ${card.answer}`, 20, yOffset, { maxWidth: 160 });
+          yOffset += 25;
+        });
+
+        doc.save('flashcards.pdf');
+      };
+
+      return (
+        <div className="max-w-4xl w-full bg-white p-6 rounded-lg shadow-lg">
+          <h1 className="text-3xl font-bold text-center mb-6 text-blue-700">Flashcard Generator</h1>
+
+          {/* Input Section */}
+          <div className="mb-6">
+            <label className="block text-lg font-medium mb-2 text-gray-700">Upload PDF or Enter Text:</label>
+            <input
+              type="file"
+              accept="application/pdf"
+              className="mb-3 w-full p-2 border rounded-lg"
+              onChange={handleFileUpload}
+            />
+            <textarea
+              className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows="5"
+              placeholder="Paste your lecture notes or text here (e.g., 'Photosynthesis: Process by which plants make food...')"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+            />
+            <button
+              className="mt-3 w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition"
+              onClick={handleGenerate}
+            >
+              Generate Flashcards
+            </button>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
+              {error}
+            </div>
+          )}
+
+          {/* Flashcards Display */}
+          {flashcards.length > 0 && (
+            <div>
+              <h2 className="text-2xl font-semibold mb-4 text-blue-600">Generated Flashcards</h2>
+              <div className="flex justify-between mb-4">
+                <button
+                  className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition"
+                  onClick={() => setIsStudyMode(!isStudyMode)}
+                >
+                  {isStudyMode ? 'View All Cards' : 'Enter Study Mode'}
+                </button>
+                <div>
+                  <button
+                    className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition mr-2"
+                    onClick={handleExportText}
+                  >
+                    Export as Text
+                  </button>
+                  <button
+                    className="bg-teal-500 text-white px-4 py-2 rounded-lg hover:bg-teal-600 transition"
+                    onClick={handleExportPDF}
+                  >
+                    Export as PDF
+                  </button>
+                </div>
+              </div>
+
+              {isStudyMode ? (
+                <StudyMode flashcards={flashcards} onExit={() => setIsStudyMode(false)} />
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                  {flashcards.map((card, index) => (
+                    <Flashcard
+                      key={index}
+                      question={card.question}
+                      answer={card.answer}
+                      index={index}
+                      isFlipped={flippedStates[index]}
+                      onFlip={() => toggleFlip(index)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Render the App
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
