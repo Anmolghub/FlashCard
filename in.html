@@ -10,12 +10,13 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body>
-  <div id="root" className="min-h-screen bg-gray-100 flex items-center justify-center p-4"></div>
+<body className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 font-inter">
+  <div id="root" className="min-h-screen flex items-center justify-center p-6"></div>
 
   <script type="text/babel">
-    const { useState } = React;
+    const { useState, useEffect } = React;
     const { jsPDF } = window.jspdf;
 
     // Function to extract text from a PDF file
@@ -48,12 +49,19 @@
           const [question, ...answerParts] = line.split(':');
           const answer = answerParts.join(':').trim();
           if (question && answer) {
-            flashcards.push({ question: question.trim(), answer });
+            flashcards.push({ 
+              question: question.trim(), 
+              answer, 
+              category: 'General',
+              id: Date.now() + Math.random()
+            });
           }
         } else {
           flashcards.push({
             question: `What is ${line.trim()}?`,
-            answer: 'Please provide a definition.'
+            answer: 'Please provide a definition.',
+            category: 'General',
+            id: Date.now() + Math.random()
           });
         }
       });
@@ -62,18 +70,20 @@
     }
 
     // Flashcard Component
-    function Flashcard({ question, answer, index, isStudyMode = false, isFlipped, onFlip }) {
+    function Flashcard({ question, answer, index, isStudyMode = false, isFlipped, onFlip, category }) {
       return (
         <div
           className={`${
-            isStudyMode ? 'w-full max-w-md h-64' : 'w-64 h-40'
-          } bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl shadow-lg flex flex-col justify-center items-center cursor-pointer hover:shadow-xl transition-all duration-300 border border-blue-200`}
+            isStudyMode ? 'w-full max-w-lg h-72' : 'w-72 h-48'
+          } bg-white p-6 rounded-2xl shadow-xl flex flex-col justify-center items-center cursor-pointer hover:scale-105 transform transition-all duration-300 border border-gray-100 relative group overflow-hidden`}
           onClick={onFlip}
         >
-          <p className="text-xl font-bold text-blue-800 text-center mb-2">
+          <div className="absolute top-0 left-0 w-full h-2 bg-blue-500 group-hover:bg-purple-500 transition-colors"></div>
+          <span className="absolute top-2 right-2 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{category}</span>
+          <p className="text-lg font-semibold text-gray-800 text-center mb-2 px-4">
             {isFlipped ? answer : question}
           </p>
-          <p className="text-sm text-blue-600">
+          <p className="text-sm text-gray-500">
             {isFlipped ? 'Question' : 'Answer'} {index + 1}
           </p>
         </div>
@@ -81,32 +91,62 @@
     }
 
     // Study Mode Component
-    function StudyMode({ flashcards, onExit }) {
+    function StudyMode({ flashcards, onExit, isShuffled, setIsShuffled }) {
       const [currentIndex, setCurrentIndex] = useState(0);
       const [isFlipped, setIsFlipped] = useState(false);
+      const [progress, setProgress] = useState(0);
+      const [displayedCards, setDisplayedCards] = useState(flashcards);
+
+      useEffect(() => {
+        setProgress(((currentIndex + 1) / displayedCards.length) * 100);
+      }, [currentIndex, displayedCards.length]);
+
+      useEffect(() => {
+        if (isShuffled) {
+          setDisplayedCards([...flashcards].sort(() => Math.random() - 0.5));
+        } else {
+          setDisplayedCards(flashcards);
+        }
+        setCurrentIndex(0);
+        setIsFlipped(false);
+      }, [isShuffled, flashcards]);
 
       const handleNext = () => {
         setIsFlipped(false);
-        setCurrentIndex((prev) => (prev + 1) % flashcards.length);
+        setCurrentIndex((prev) => (prev + 1) % displayedCards.length);
       };
 
       const handlePrev = () => {
         setIsFlipped(false);
-        setCurrentIndex((prev) => (prev - 1 + flashcards.length) % flashcards.length);
+        setCurrentIndex((prev) => (prev - 1 + displayedCards.length) % displayedCards.length);
       };
 
       return (
-        <div className="w-full max-w-lg">
-          <div className="flex justify-between mb-4">
-            <button
-              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition"
-              onClick={onExit}
-            >
-              Exit Study Mode
-            </button>
-            <div>
+        <div className="w-full max-w-2xl">
+          <div className="bg-white p-4 rounded-2xl shadow-lg mb-6">
+            <div className="flex justify-between items-center mb-4">
               <button
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition mr-2"
+                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition"
+                onClick={onExit}
+              >
+                Exit Study Mode
+              </button>
+              <button
+                className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition"
+                onClick={() => setIsShuffled(!isShuffled)}
+              >
+                {isShuffled ? 'Unshuffle' : 'Shuffle'}
+              </button>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+              <div
+                className="bg-blue-500 h-2.5 rounded-full transition-all duration-500"
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+            <div className="flex justify-between">
+              <button
+                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
                 onClick={handlePrev}
               >
                 Previous
@@ -120,15 +160,16 @@
             </div>
           </div>
           <Flashcard
-            question={flashcards[currentIndex].question}
-            answer={flashcards[currentIndex].answer}
+            question={displayedCards[currentIndex].question}
+            answer={displayedCards[currentIndex].answer}
             index={currentIndex}
             isStudyMode={true}
             isFlipped={isFlipped}
             onFlip={() => setIsFlipped(!isFlipped)}
+            category={displayedCards[currentIndex].category}
           />
-          <p className="text-center mt-4 text-gray-600">
-            Card {currentIndex + 1} of {flashcards.length}
+          <p className="text-center mt-4 text-gray-600 font-medium">
+            Card {currentIndex + 1} of {displayedCards.length}
           </p>
         </div>
       );
@@ -141,6 +182,26 @@
       const [error, setError] = useState('');
       const [isStudyMode, setIsStudyMode] = useState(false);
       const [flippedStates, setFlippedStates] = useState([]);
+      const [category, setCategory] = useState('General');
+      const [searchTerm, setSearchTerm] = useState('');
+      const [isShuffled, setIsShuffled] = useState(false);
+
+      // Load flashcards from localStorage
+      useEffect(() => {
+        const savedFlashcards = localStorage.getItem('flashcards');
+        if (savedFlashcards) {
+          const parsed = JSON.parse(savedFlashcards);
+          setFlashcards(parsed);
+          setFlippedStates(new Array(parsed.length).fill(false));
+        }
+      }, []);
+
+      // Save flashcards to localStorage
+      useEffect(() => {
+        if (flashcards.length > 0) {
+          localStorage.setItem('flashcards', JSON.stringify(flashcards));
+        }
+      }, [flashcards]);
 
       const handleFileUpload = async (event) => {
         const file = event.target.files[0];
@@ -162,7 +223,10 @@
 
       const handleGenerate = () => {
         setError('');
-        const generated = generateFlashcards(inputText);
+        const generated = generateFlashcards(inputText).map(card => ({
+          ...card,
+          category
+        }));
 
         if (generated.length === 0) {
           setError('No valid content found to generate flashcards. Please provide meaningful input.');
@@ -170,8 +234,8 @@
           return;
         }
 
-        setFlashcards(generated);
-        setFlippedStates(new Array(generated.length).fill(false));
+        setFlashcards([...flashcards, ...generated]);
+        setFlippedStates(new Array(flashcards.length + generated.length).fill(false));
       };
 
       const toggleFlip = (index) => {
@@ -186,7 +250,9 @@
           return;
         }
 
-        const exportText = flashcards.map(card => `Q: ${card.question}\nA: ${card.answer}`).join('\n\n');
+        const exportText = flashcards.map(card => 
+          `Category: ${card.category}\nQ: ${card.question}\nA: ${card.answer}`
+        ).join('\n\n');
         const blob = new Blob([exportText], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -205,51 +271,79 @@
         const doc = new jsPDF();
         let yOffset = 20;
 
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(20);
+        doc.setTextColor(0, 102, 204);
+        doc.text('Flashcard Set', 105, yOffset, { align: 'center' });
+        yOffset += 15;
+
         flashcards.forEach((card, index) => {
-          if (yOffset > 270) {
+          if (yOffset > 260) {
             doc.addPage();
             yOffset = 20;
           }
 
-          doc.setFontSize(16);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(14);
           doc.setTextColor(0, 102, 204);
-          doc.text(`Flashcard ${index + 1}`, 20, yOffset);
+          doc.text(`Flashcard ${index + 1} - ${card.category}`, 20, yOffset);
           yOffset += 10;
 
+          doc.setFont('helvetica', 'normal');
           doc.setFontSize(12);
           doc.setTextColor(0, 0, 0);
-          doc.text(`Question: ${card.question}`, 20, yOffset, { maxWidth: 160 });
-          yOffset += 15;
+          doc.text(`Question: ${card.question}`, 20, yOffset, { maxWidth: 170 });
+          yOffset += doc.getTextDimensions(`Question: ${card.question}`, { maxWidth: 170 }).h + 5;
 
-          doc.text(`Answer: ${card.answer}`, 20, yOffset, { maxWidth: 160 });
-          yOffset += 25;
+          doc.text(`Answer: ${card.answer}`, 20, yOffset, { maxWidth: 170 });
+          yOffset += doc.getTextDimensions(`Answer: ${card.answer}`, { maxWidth: 170 }).h + 15;
         });
 
         doc.save('flashcards.pdf');
       };
 
+      const filteredFlashcards = flashcards.filter(card =>
+        card.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        card.answer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        card.category.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+
       return (
-        <div className="max-w-4xl w-full bg-white p-6 rounded-lg shadow-lg">
-          <h1 className="text-3xl font-bold text-center mb-6 text-blue-700">Flashcard Generator</h1>
+        <div className="max-w-5xl w-full bg-white p-8 rounded-3xl shadow-2xl">
+          <h1 className="text-4xl font-bold text-center mb-8 text-blue-700 tracking-tight">
+            Flashcard Generator
+          </h1>
 
           {/* Input Section */}
-          <div className="mb-6">
-            <label className="block text-lg font-medium mb-2 text-gray-700">Upload PDF or Enter Text:</label>
+          <div className="mb-8 bg-gray-50 p-6 rounded-2xl">
+            <label className="block text-lg font-semibold mb-3 text-gray-700">Upload PDF or Enter Text:</label>
             <input
               type="file"
               accept="application/pdf"
-              className="mb-3 w-full p-2 border rounded-lg"
+              className="mb-4 w-full p-3 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition"
               onChange={handleFileUpload}
             />
+            <div className="flex gap-4 mb-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium mb-1 text-gray-600">Category</label>
+                <input
+                  type="text"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Biology"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                />
+              </div>
+            </div>
             <textarea
-              className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              rows="5"
+              className="w-full p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+              rows="6"
               placeholder="Paste your lecture notes or text here (e.g., 'Photosynthesis: Process by which plants make food...')"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
             />
             <button
-              className="mt-3 w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition"
+              className="mt-4 w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition transform hover:scale-105"
               onClick={handleGenerate}
             >
               Generate Flashcards
@@ -258,7 +352,10 @@
 
           {/* Error Message */}
           {error && (
-            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
+            <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg flex items-center">
+              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
               {error}
             </div>
           )}
@@ -266,42 +363,57 @@
           {/* Flashcards Display */}
           {flashcards.length > 0 && (
             <div>
-              <h2 className="text-2xl font-semibold mb-4 text-blue-600">Generated Flashcards</h2>
-              <div className="flex justify-between mb-4">
-                <button
-                  className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition"
-                  onClick={() => setIsStudyMode(!isStudyMode)}
-                >
-                  {isStudyMode ? 'View All Cards' : 'Enter Study Mode'}
-                </button>
-                <div>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-semibold text-blue-600">Generated Flashcards</h2>
+                <div className="flex gap-4">
+                  <input
+                    type="text"
+                    className="p-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Search flashcards..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
                   <button
-                    className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition mr-2"
-                    onClick={handleExportText}
+                    className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition"
+                    onClick={() => setIsStudyMode(!isStudyMode)}
                   >
-                    Export as Text
-                  </button>
-                  <button
-                    className="bg-teal-500 text-white px-4 py-2 rounded-lg hover:bg-teal-600 transition"
-                    onClick={handleExportPDF}
-                  >
-                    Export as PDF
+                    {isStudyMode ? 'View All Cards' : 'Enter Study Mode'}
                   </button>
                 </div>
               </div>
+              <div className="flex gap-4 mb-6">
+                <button
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+                  onClick={handleExportText}
+                >
+                  Export as Text
+                </button>
+                <button
+                  className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition"
+                  onClick={handleExportPDF}
+                >
+                  Export as PDF
+                </button>
+              </div>
 
               {isStudyMode ? (
-                <StudyMode flashcards={flashcards} onExit={() => setIsStudyMode(false)} />
+                <StudyMode 
+                  flashcards={filteredFlashcards} 
+                  onExit={() => setIsStudyMode(false)}
+                  isShuffled={isShuffled}
+                  setIsShuffled={setIsShuffled}
+                />
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-                  {flashcards.map((card, index) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredFlashcards.map((card, index) => (
                     <Flashcard
-                      key={index}
+                      key={card.id}
                       question={card.question}
                       answer={card.answer}
                       index={index}
                       isFlipped={flippedStates[index]}
                       onFlip={() => toggleFlip(index)}
+                      category={card.category}
                     />
                   ))}
                 </div>
